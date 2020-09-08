@@ -59,6 +59,12 @@ parser.set_defaults(verbose=True)
 best_err1 = 100
 best_err5 = 100
 
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+        
+    def forward(self, x):
+        return x
 
 def main():
     global args, best_err1, best_err5
@@ -128,6 +134,8 @@ def main():
         raise Exception(
             "=> no checkpoint found at '{}'".format(args.pretrained))
 
+
+    model.fc = Identity()
     print(model)
     print('the number of model parameters: {}'.format(
         sum([p.data.nelement() for p in model.parameters()])))
