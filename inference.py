@@ -135,10 +135,7 @@ def main():
             "=> no checkpoint found at '{}'".format(args.pretrained))
 
 
-    model.fc = Identity()
-    print(model)
-    print('the number of model parameters: {}'.format(
-        sum([p.data.nelement() for p in model.parameters()])))
+    model.module.fc = Identity()
 
     cudnn.benchmark = True
 
