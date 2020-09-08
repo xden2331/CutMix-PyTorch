@@ -17,6 +17,7 @@ import torchvision.datasets as datasets
 import torchvision.models as models
 import resnet as RN
 import pyramidnet as PYRM
+from PIL import Image
 
 import warnings
 
@@ -50,6 +51,7 @@ parser.add_argument('--no-verbose', dest='verbose', action='store_false',
                     help='to print the status at every iteration')
 parser.add_argument(
     '--pretrained', default='/set/your/model/path', type=str, metavar='PATH')
+parser.add_argument('--img_path', default='/set/your/image/path', type=str)
 
 parser.set_defaults(bottleneck=True)
 parser.set_defaults(verbose=True)
@@ -62,33 +64,24 @@ def main():
     global args, best_err1, best_err5
     args = parser.parse_args()
 
+    img = Image.open(args.img_path).convert('RGB')
+
     if args.dataset.startswith('cifar'):
+        size = (32, 32)
         normalize = transforms.Normalize(mean=[x / 255.0 for x in [125.3, 123.0, 113.9]],
                                          std=[x / 255.0 for x in [63.0, 62.1, 66.7]])
 
-        transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ])
-
-        transform_test = transforms.Compose([
+        transform_inference = transforms.Compose([
+            transforms.Resize(size),
             transforms.ToTensor(),
             normalize
         ])
 
+        img = transform_inference(img).unsqueeze(0)
+
         if args.dataset == 'cifar100':
-            val_loader = torch.utils.data.DataLoader(
-                datasets.CIFAR100('../data', download=True,
-                                  train=False, transform=transform_test),
-                batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
             numberofclass = 100
         elif args.dataset == 'cifar10':
-            val_loader = torch.utils.data.DataLoader(
-                datasets.CIFAR10('../data', download=True,
-                                 train=False, transform=transform_test),
-                batch_size=args.batch_size, shuffle=True, num_workers=args.workers, pin_memory=True)
             numberofclass = 10
         else:
             raise Exception('unknown dataset: {}'.format(args.dataset))
@@ -139,93 +132,18 @@ def main():
     print('the number of model parameters: {}'.format(
         sum([p.data.nelement() for p in model.parameters()])))
 
-    # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss().cuda()
-
     cudnn.benchmark = True
 
-    # evaluate on validation set
-    err1, err5, val_loss = validate(val_loader, model, criterion)
+    # Inference
+    caption = inference(img, model)
 
-    print('Accuracy (top-1 and 5 error):', err1, err5)
+    print('Inference:', caption)
 
-
-def validate(val_loader, model, criterion):
-    batch_time = AverageMeter()
-    losses = AverageMeter()
-    top1 = AverageMeter()
-    top5 = AverageMeter()
-
+def inference(input, model):
     # switch to evaluate mode
     model.eval()
-
-    end = time.time()
-    for i, (input, target) in enumerate(val_loader):
-        target = target.cuda()
-
-        output = model(input)
-        loss = criterion(output, target)
-
-        # measure accuracy and record loss
-        err1, err5 = accuracy(output.data, target, topk=(1, 5))
-
-        losses.update(loss.item(), input.size(0))
-
-        top1.update(err1.item(), input.size(0))
-        top5.update(err5.item(), input.size(0))
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        if i % args.print_freq == 0 and args.verbose == True:
-            print('Test (on val set): [{0}/{1}]\t'
-                  'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                  'Top 1-err {top1.val:.4f} ({top1.avg:.4f})\t'
-                  'Top 5-err {top5.val:.4f} ({top5.avg:.4f})'.format(
-                      i, len(val_loader), batch_time=batch_time, loss=losses,
-                      top1=top1, top5=top5))
-
-    return top1.avg, top5.avg, losses.avg
-
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
-        wrong_k = batch_size - correct_k
-        res.append(wrong_k.mul_(100.0 / batch_size))
-
-    return res
-
+    output = model(input)
+    return output
 
 if __name__ == '__main__':
     main()
