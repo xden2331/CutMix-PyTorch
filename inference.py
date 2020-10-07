@@ -139,10 +139,12 @@ def main():
 
     cudnn.benchmark = True
 
-    # Inference
-    caption = inference(img, model)
+    print(model)
 
-    print('Inference:', caption)
+    # # Inference
+    # caption = inference(img, model)
+
+    # print('Inference:', caption)
 
 def inference(input, model):
     # switch to evaluate mode
